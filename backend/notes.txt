@@ -1,0 +1,298 @@
+==============================================
+   FULL MONGODB SETUP - STEP BY STEP GUIDE
+==============================================
+
+📌 STEP 1: PROJECT INITIALIZATION
+----------------------------------
+# Create a new folder and initialize Node.js project
+mkdir backend
+cd backend
+npm init -y
+
+📌 STEP 2: INSTALL REQUIRED PACKAGES
+------------------------------------
+npm install express cors mongodb
+
+# What each package does:
+- express    : Web framework for Node.js (handles routes, middleware)
+- cors       : Enables Cross-Origin Resource Sharing (allows frontend to connect)
+- mongodb    : Official MongoDB driver for Node.js
+
+📌 STEP 3: CREATE MONGODB ATLAS ACCOUNT (Cloud Database)
+---------------------------------------------------------
+1. Go to https://www.mongodb.com/atlas
+2. Sign up / Login
+3. Create a FREE Cluster (Shared Cluster - M0)
+4. Choose cloud provider (AWS/Google/Azure) and region
+5. Click "Create Cluster" (takes 1-3 minutes)
+
+📌 STEP 5: CONFIGURE NETWORK ACCESS
+------------------------------------
+1. Go to "Network Access" in left sidebar
+2. Click "Add IP Address"
+3. Click "Allow Access from Anywhere" (0.0.0.0/0)
+   - For development only! In production, use specific IPs
+4. Click "Confirm"
+
+📌 STEP 6: GET CONNECTION STRING
+---------------------------------
+1. Go to "Database" > Click "Connect" on your cluster
+2. Choose "Connect your application"
+3. Select Driver: Node.js, Version: 4.1 or later
+4. Copy the connection string:
+   mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+
+5. Replace <username> and <password> with your credentials
+
+📌 STEP 7: BASIC EXPRESS SERVER SETUP
+--------------------------------------
+
+const express = require("express");
+const cors = require("cors");
+const port = process.env.PORT || 5000;
+const app = express();
+
+// Middleware
+app.use(cors());           // Enable CORS for all routes
+app.use(express.json());   // Parse JSON request bodies
+
+// Root Route
+app.get("/", (req, res) => {
+  res.send("Server is running");
+});
+
+// Start Server
+app.listen(port, () => {
+  console.log(`Server is running on port: ${port}`);
+});
+
+
+📌 STEP 8: MONGODB CONNECTION SETUP
+------------------------------------
+```javascript
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+
+// Connection URI (Replace with your actual URI)
+const uri = "mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/?appName=Cluster0";
+
+// Create MongoClient with options
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+```
+
+📌 STEP 9: CONNECT TO DATABASE & CREATE COLLECTION
+---------------------------------------------------
+```javascript
+async function run() {
+  try {
+    // Connect to MongoDB
+    await client.connect();
+
+    // Select Database and Collection
+    const database = client.db("userDB");           // Database name
+    const usersCollection = database.collection("users");  // Collection name
+
+    // Ping to confirm connection
+    await client.db("admin").command({ ping: 1 });
+    console.log("Successfully connected to MongoDB!");
+
+    // Your CRUD operations go here...
+
+  } finally {
+    // Optional: Close connection when done
+    // await client.close();
+  }
+}
+
+run().catch(console.dir);
+```
+
+📌 STEP 10: CRUD OPERATIONS
+============================
+
+🔵 CREATE (POST) - Add New Document
+------------------------------------
+```javascript
+app.post("/users", async (req, res) => {
+  const user = req.body;
+  console.log("New User:", user);
+  const result = await usersCollection.insertOne(user);
+  res.send(result);
+});
+
+// Insert Multiple Documents
+app.post("/users/many", async (req, res) => {
+  const users = req.body;
+  const result = await usersCollection.insertMany(users);
+  res.send(result);
+});
+```
+
+🟢 READ (GET) - Retrieve Documents
+-----------------------------------
+```javascript
+// Get ALL users
+app.get("/users", async (req, res) => {
+  const cursor = usersCollection.find();
+  const users = await cursor.toArray();
+  res.send(users);
+});
+
+// Get SINGLE user by ID
+app.get("/users/:id", async (req, res) => {
+  const id = req.params.id;
+  const query = { _id: new ObjectId(id) };
+  const user = await usersCollection.findOne(query);
+  res.send(user);
+});
+
+// Get users with QUERY (e.g., by email)
+app.get("/users/email/:email", async (req, res) => {
+  const email = req.params.email;
+  const query = { email: email };
+  const user = await usersCollection.findOne(query);
+  res.send(user);
+});
+```
+
+🟡 UPDATE (PUT/PATCH) - Modify Documents
+-----------------------------------------
+```javascript
+// Update a user by ID
+app.put("/users/:id", async (req, res) => {
+  const id = req.params.id;
+  const updatedUser = req.body;
+  const filter = { _id: new ObjectId(id) };
+  const options = { upsert: true };  // Create if doesn't exist
+  const updateDoc = {
+    $set: {
+      name: updatedUser.name,
+      email: updatedUser.email,
+      // Add more fields as needed
+    },
+  };
+  const result = await usersCollection.updateOne(filter, updateDoc, options);
+  res.send(result);
+});
+
+// Partial Update (PATCH)
+app.patch("/users/:id", async (req, res) => {
+  const id = req.params.id;
+  const updates = req.body;
+  const filter = { _id: new ObjectId(id) };
+  const updateDoc = { $set: updates };
+  const result = await usersCollection.updateOne(filter, updateDoc);
+  res.send(result);
+});
+```
+
+🔴 DELETE - Remove Documents
+-----------------------------
+```javascript
+// Delete SINGLE user by ID
+app.delete("/users/:id", async (req, res) => {
+  const id = req.params.id;
+  const query = { _id: new ObjectId(id) };
+  const result = await usersCollection.deleteOne(query);
+  res.send(result);
+});
+
+// Delete Multiple users
+app.delete("/users", async (req, res) => {
+  const query = req.body;  // e.g., { status: "inactive" }
+  const result = await usersCollection.deleteMany(query);
+  res.send(result);
+});
+```
+
+📌 STEP 11: COMPLETE WORKING EXAMPLE
+=====================================
+```javascript
+const express = require("express");
+const cors = require("cors");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+
+const port = process.env.PORT || 5000;
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// MongoDB Connection
+const uri = "mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/?appName=Cluster0";
+
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+
+async function run() {
+  try {
+    await client.connect();
+    
+    const usersCollection = client.db("userDB").collection("users");
+
+    // CREATE
+    app.post("/users", async (req, res) => {
+      const result = await usersCollection.insertOne(req.body);
+      res.send(result);
+    });
+
+    // READ ALL
+    app.get("/users", async (req, res) => {
+      const users = await usersCollection.find().toArray();
+      res.send(users);
+    });
+
+    // READ ONE
+    app.get("/users/:id", async (req, res) => {
+      const query = { _id: new ObjectId(req.params.id) };
+      const user = await usersCollection.findOne(query);
+      res.send(user);
+    });
+
+    // UPDATE
+    app.put("/users/:id", async (req, res) => {
+      const filter = { _id: new ObjectId(req.params.id) };
+      const updateDoc = { $set: req.body };
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    // DELETE
+    app.delete("/users/:id", async (req, res) => {
+      const query = { _id: new ObjectId(req.params.id) };
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    console.log("Connected to MongoDB!");
+  } finally {
+    // Keep connection open
+  }
+}
+run().catch(console.dir);
+
+// Root Route
+app.get("/", (req, res) => {
+  res.send("Server is running");
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port: ${port}`);
+});
+```
+
+==============================================
+              END OF GUIDE
+==============================================
+
